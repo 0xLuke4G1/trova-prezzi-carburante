@@ -122,30 +122,63 @@ function openStation(st) {
   const [id, lat, lon, bIdx, nome, ind, comune, prov, prezzi] = st;
   const bandiera = DATA.brands[bIdx] || '';
 
+  // Raggruppa i prezzi per carburante: { carb: {self, servito, eta} }
   const order = ['Benzina', 'Gasolio', 'GPL', 'Metano'];
-  const list = prezzi.map(([fIdx, prezzo, self]) => ({ carb: DATA.fuels[fIdx], prezzo, self }));
-  list.sort((a, b) => {
+  const gruppi = new Map();
+  let etaMin = 255;
+  for (const [fIdx, prezzo, self, eta] of prezzi) {
+    const carb = DATA.fuels[fIdx];
+    if (!gruppi.has(carb)) gruppi.set(carb, { carb, self: null, servito: null, eta: 255 });
+    const g = gruppi.get(carb);
+    if (self === 1) g.self = prezzo; else g.servito = prezzo;
+    g.eta = Math.min(g.eta, eta ?? 255);
+    if ((eta ?? 255) < etaMin) etaMin = eta ?? 255;
+  }
+  const lista = [...gruppi.values()].sort((a, b) => {
     const ia = order.indexOf(a.carb), ib = order.indexOf(b.carb);
-    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || (b.self - a.self);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.carb.localeCompare(b.carb);
   });
 
   const maps = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
-  const rows = list.map((p) => `
-    <tr>
-      <td class="fuel">${esc(p.carb)}</td>
-      <td class="mode">${p.self ? 'Self' : 'Servito'}</td>
-      <td class="price">${p.prezzo.toFixed(3)} <span>€/l</span></td>
-    </tr>`).join('');
+  const cards = lista.map((g) => `
+    <div class="fuel-card">
+      <div class="fuel-card-head">
+        <span class="fuel-name">${esc(g.carb)}</span>
+        <span class="fuel-age">${etaLabel(g.eta)}</span>
+      </div>
+      <div class="fuel-prices">
+        ${priceCell('Self', g.self)}
+        ${priceCell('Servito', g.servito)}
+      </div>
+    </div>`).join('');
 
   sheetContent.innerHTML = `
     <h3 class="st-name">${esc(nome || bandiera || 'Distributore')}</h3>
     ${bandiera ? `<span class="st-brand">${esc(bandiera)}</span>` : ''}
     <p class="st-addr">${esc(ind || '')}${comune ? ' — ' + esc(comune) : ''} ${prov ? '(' + esc(prov) + ')' : ''}
       <br /><a href="${maps}" target="_blank" rel="noopener">▸ Indicazioni stradali</a></p>
-    <table class="price-table">
-      <thead><tr><th>Carburante</th><th>Modalità</th><th style="text-align:right">Prezzo</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="3">Nessun prezzo disponibile</td></tr>'}</tbody>
-    </table>`;
+    <div class="fuel-cards">${cards || '<p>Nessun prezzo disponibile</p>'}</div>
+    <p class="freshness">Prezzi comunicati dal gestore al MIMIT · aggiornamento più recente: <strong>${etaLabel(etaMin)}</strong></p>`;
+}
+
+// Cella prezzo per modalità (Self / Servito)
+function priceCell(label, prezzo) {
+  if (prezzo == null) {
+    return `<div class="price-cell empty"><span class="pc-mode">${label}</span><span class="pc-val">—</span></div>`;
+  }
+  return `<div class="price-cell"><span class="pc-mode">${label}</span>
+    <span class="pc-val">${prezzo.toFixed(3)}<small>€/l</small></span></div>`;
+}
+
+// Etichetta "freschezza" a partire dai giorni trascorsi dalla comunicazione
+function etaLabel(giorni) {
+  if (giorni == null || giorni >= 255) return 'data non disponibile';
+  if (giorni <= 0) return 'oggi';
+  if (giorni === 1) return 'ieri';
+  if (giorni < 7) return `${giorni} giorni fa`;
+  if (giorni < 14) return 'oltre 1 settimana fa';
+  if (giorni < 31) return `${Math.round(giorni / 7)} settimane fa`;
+  return 'oltre 1 mese fa';
 }
 
 function closeSheet() { sheet.hidden = true; }
@@ -251,10 +284,10 @@ async function init() {
   state.fuelIdx = DATA.fuels.indexOf(state.fuel);
   buildFuelButtons(principali);
 
-  const d = DATA.updated ? new Date(DATA.updated) : null;
+  const d = DATA.estrazione ? new Date(DATA.estrazione) : (DATA.updated ? new Date(DATA.updated) : null);
   const dataTxt = d ? d.toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' }) : '—';
   document.getElementById('meta-line').textContent =
-    `${DATA.s.length.toLocaleString('it-IT')} distributori · dati MIMIT del ${dataTxt}`;
+    `${DATA.s.length.toLocaleString('it-IT')} distributori · dati ufficiali MIMIT del ${dataTxt}`;
 
   loadStations();
 }

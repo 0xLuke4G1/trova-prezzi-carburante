@@ -29,9 +29,25 @@ function num(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+// Prima riga del CSV: "Estrazione del 2026-06-22" -> Date (mezzanotte UTC)
+function dataEstrazione(testo) {
+  const m = (testo.split(/\r?\n/)[0] || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+  return m ? new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`) : new Date();
+}
+
+// dtComu "19/06/2026 19:30:09" -> giorni trascorsi rispetto all'estrazione (0 = stesso giorno)
+function etaGiorni(dtComu, estrazione) {
+  const m = String(dtComu || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (!m) return 0;
+  const d = new Date(`${m[3]}-${m[2]}-${m[1]}T00:00:00Z`);
+  const giorni = Math.round((estrazione - d) / 86400000);
+  return Math.max(0, Math.min(255, giorni));
+}
+
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
   const [anaTxt, prezziTxt] = await Promise.all([scarica(URL_ANAGRAFICA), scarica(URL_PREZZI)]);
+  const estrazione = dataEstrazione(prezziTxt);
 
   // --- Impianti ---
   const brands = [];
@@ -74,13 +90,15 @@ async function main() {
 
     const carb = (c[1] || '').trim();
     if (!fuelIdx.has(carb)) { fuelIdx.set(carb, fuels.length); fuels.push(carb); }
-    s[si][8].push([fuelIdx.get(carb), +prezzo.toFixed(3), c[3]?.trim() === '1' ? 1 : 0]);
+    // [indiceCarburante, prezzo, self(0/1), giorniDallaComunicazione]
+    s[si][8].push([fuelIdx.get(carb), +prezzo.toFixed(3), c[3]?.trim() === '1' ? 1 : 0, etaGiorni(c[4], estrazione)]);
     nPr++;
   }
   console.log(`✓ ${nPr} prezzi`);
 
   const payload = {
-    updated: new Date().toISOString(),
+    updated: new Date().toISOString(),   // quando è stato generato il sito
+    estrazione: estrazione.toISOString(), // data ufficiale dell'export MIMIT
     brands,
     fuels,
     s,
