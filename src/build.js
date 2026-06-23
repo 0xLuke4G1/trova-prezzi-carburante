@@ -12,11 +12,32 @@ const OUT_DIR = join(__dirname, '..', 'public');
 const URL_ANAGRAFICA = 'https://www.mimit.gov.it/images/exportCSV/anagrafica_impianti_attivi.csv';
 const URL_PREZZI = 'https://www.mimit.gov.it/images/exportCSV/prezzo_alle_8.csv';
 
-async function scarica(url) {
-  console.log(`→ Scarico ${url}`);
-  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 CarburantiItalia/1.0' } });
-  if (!res.ok) throw new Error(`HTTP ${res.status} su ${url}`);
-  return await res.text();
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Il server MIMIT a volte chiude la connessione dai runner GitHub: riprova con
+// timeout e backoff crescente invece di far fallire tutto il deploy.
+async function scarica(url, tentativi = 5) {
+  for (let i = 1; i <= tentativi; i++) {
+    console.log(`→ Scarico ${url}${i > 1 ? ` (tentativo ${i}/${tentativi})` : ''}`);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 60000); // 60s di timeout
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 CarburantiItalia/1.0' },
+        signal: ctrl.signal,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const testo = await res.text();
+      if (testo.length < 1000) throw new Error(`risposta troppo corta (${testo.length} byte)`);
+      return testo;
+    } catch (err) {
+      console.warn(`  ⚠️  ${err.message}`);
+      if (i === tentativi) throw new Error(`download fallito dopo ${tentativi} tentativi: ${url}`);
+      await sleep(i * 5000); // 5s, 10s, 15s, 20s
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 }
 
 // CSV separatore "|", salta riga 0 ("Estrazione del ...") e riga 1 (header colonne)
