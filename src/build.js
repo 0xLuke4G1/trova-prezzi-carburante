@@ -56,13 +56,13 @@ function dataEstrazione(testo) {
   return m ? new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`) : new Date();
 }
 
-// dtComu "19/06/2026 19:30:09" -> giorni trascorsi rispetto all'estrazione (0 = stesso giorno)
-function etaGiorni(dtComu, estrazione) {
-  const m = String(dtComu || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
-  if (!m) return 0;
-  const d = new Date(`${m[3]}-${m[2]}-${m[1]}T00:00:00Z`);
-  const giorni = Math.round((estrazione - d) / 86400000);
-  return Math.max(0, Math.min(255, giorni));
+// dtComu "19/06/2026 19:30:09" -> minuti epoch della comunicazione (null se assente).
+// Uso Date.UTC sui componenti così l'orario "di parete" italiano viene preservato
+// e riformattato identico nel browser (vedi timeZone:'UTC' nel frontend).
+function tsComu(dtComu) {
+  const m = String(dtComu || '').match(/(\d{2})\/(\d{2})\/(\d{4})[ T](\d{2}):(\d{2})/);
+  if (!m) return null;
+  return Math.floor(Date.UTC(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]) / 60000);
 }
 
 async function main() {
@@ -111,8 +111,8 @@ async function main() {
 
     const carb = (c[1] || '').trim();
     if (!fuelIdx.has(carb)) { fuelIdx.set(carb, fuels.length); fuels.push(carb); }
-    // [indiceCarburante, prezzo, self(0/1), giorniDallaComunicazione]
-    s[si][8].push([fuelIdx.get(carb), +prezzo.toFixed(3), c[3]?.trim() === '1' ? 1 : 0, etaGiorni(c[4], estrazione)]);
+    // [indiceCarburante, prezzo, self(0/1), minutiEpochComunicazione|null]
+    s[si][8].push([fuelIdx.get(carb), +prezzo.toFixed(3), c[3]?.trim() === '1' ? 1 : 0, tsComu(c[4])]);
     nPr++;
   }
   console.log(`✓ ${nPr} prezzi`);

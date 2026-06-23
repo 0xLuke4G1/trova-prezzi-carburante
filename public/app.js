@@ -3,6 +3,7 @@
 // ====== Dati statici (nessun backend: tutto da ./stations.json) ======
 // Formato: { updated, brands:[], fuels:[], s:[ [id,lat,lon,bIdx,nome,ind,comune,prov, [[fIdx,prezzo,self],...]] ] }
 let DATA = null;
+let principali = []; // carburanti principali effettivamente presenti nei dati
 const CARBURANTI_PRINCIPALI = ['Benzina', 'Gasolio', 'GPL', 'Metano'];
 
 const state = {
@@ -122,17 +123,17 @@ function openStation(st) {
   const [id, lat, lon, bIdx, nome, ind, comune, prov, prezzi] = st;
   const bandiera = DATA.brands[bIdx] || '';
 
-  // Raggruppa i prezzi per carburante: { carb: {self, servito, eta} }
+  // Raggruppa i prezzi per carburante: { carb: {self, servito, ts} }
   const order = ['Benzina', 'Gasolio', 'GPL', 'Metano'];
   const gruppi = new Map();
-  let etaMin = 255;
-  for (const [fIdx, prezzo, self, eta] of prezzi) {
+  let tsMax = null; // comunicazione più recente dell'intero impianto
+  for (const [fIdx, prezzo, self, ts] of prezzi) {
     const carb = DATA.fuels[fIdx];
-    if (!gruppi.has(carb)) gruppi.set(carb, { carb, self: null, servito: null, eta: 255 });
+    if (!gruppi.has(carb)) gruppi.set(carb, { carb, self: null, servito: null, ts: null });
     const g = gruppi.get(carb);
     if (self === 1) g.self = prezzo; else g.servito = prezzo;
-    g.eta = Math.min(g.eta, eta ?? 255);
-    if ((eta ?? 255) < etaMin) etaMin = eta ?? 255;
+    if (ts != null && (g.ts == null || ts > g.ts)) g.ts = ts;
+    if (ts != null && (tsMax == null || ts > tsMax)) tsMax = ts;
   }
   const lista = [...gruppi.values()].sort((a, b) => {
     const ia = order.indexOf(a.carb), ib = order.indexOf(b.carb);
@@ -144,7 +145,7 @@ function openStation(st) {
     <div class="fuel-card">
       <div class="fuel-card-head">
         <span class="fuel-name">${esc(g.carb)}</span>
-        <span class="fuel-age">${etaLabel(g.eta)}</span>
+        <span class="fuel-age">${etaLabel(g.ts)}</span>
       </div>
       <div class="fuel-prices">
         ${priceCell('Self', g.self)}
@@ -158,7 +159,7 @@ function openStation(st) {
     <p class="st-addr">${esc(ind || '')}${comune ? ' — ' + esc(comune) : ''} ${prov ? '(' + esc(prov) + ')' : ''}
       <br /><a href="${maps}" target="_blank" rel="noopener">▸ Indicazioni stradali</a></p>
     <div class="fuel-cards">${cards || '<p>Nessun prezzo disponibile</p>'}</div>
-    <p class="freshness">Prezzi comunicati dal gestore al MIMIT · aggiornamento più recente: <strong>${etaLabel(etaMin)}</strong></p>`;
+    <p class="freshness">Prezzi comunicati dal gestore al MIMIT · aggiornamento più recente: <strong>${etaLabel(tsMax)}</strong></p>`;
 }
 
 // Cella prezzo per modalità (Self / Servito)
@@ -170,15 +171,21 @@ function priceCell(label, prezzo) {
     <span class="pc-val">${prezzo.toFixed(3)}<small>€/l</small></span></div>`;
 }
 
-// Etichetta "freschezza" a partire dai giorni trascorsi dalla comunicazione
-function etaLabel(giorni) {
-  if (giorni == null || giorni >= 255) return 'data non disponibile';
-  if (giorni <= 0) return 'oggi';
-  if (giorni === 1) return 'ieri';
-  if (giorni < 7) return `${giorni} giorni fa`;
-  if (giorni < 14) return 'oltre 1 settimana fa';
-  if (giorni < 31) return `${Math.round(giorni / 7)} settimane fa`;
-  return 'oltre 1 mese fa';
+// Etichetta "freschezza" a partire dal timestamp (minuti epoch) della comunicazione.
+// Mostra il riferimento relativo + l'orario, es. "oggi alle 19:30", "ieri alle 08:15".
+function etaLabel(ts) {
+  if (ts == null) return 'data non disponibile';
+  const estr = DATA.estrazione ? Date.parse(DATA.estrazione) : Date.now();
+  const giorni = Math.max(0, Math.min(255, Math.round((estr - ts * 60000) / 86400000)));
+  const ora = new Date(ts * 60000).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+  let base;
+  if (giorni <= 0) base = 'oggi';
+  else if (giorni === 1) base = 'ieri';
+  else if (giorni < 7) base = `${giorni} giorni fa`;
+  else if (giorni < 14) base = 'oltre 1 settimana fa';
+  else if (giorni < 31) base = `${Math.round(giorni / 7)} settimane fa`;
+  else base = 'oltre 1 mese fa';
+  return `${base} alle ${ora}`;
 }
 
 function closeSheet() { sheet.hidden = true; }
@@ -216,6 +223,19 @@ document.querySelectorAll('#self-toggle button').forEach((btn) => {
   });
 });
 
+// ====== Azzera filtri ======
+function resetFilters() {
+  state.fuel = principali[0];
+  state.fuelIdx = DATA.fuels.indexOf(state.fuel);
+  state.self = '';
+  buildFuelButtons(principali);
+  document.querySelectorAll('#self-toggle button').forEach((x) => x.classList.toggle('active', x.dataset.self === ''));
+  searchInput.value = '';
+  searchResults.hidden = true;
+  loadStations();
+}
+document.getElementById('reset-filters').addEventListener('click', resetFilters);
+
 // ====== Ricerca (client-side su comune / indirizzo / nome) ======
 const searchInput = document.getElementById('search-input');
 const searchResults = document.getElementById('search-results');
@@ -230,26 +250,47 @@ searchInput.addEventListener('input', () => {
 
 function doSearch(q) {
   if (!DATA) return;
-  const out = [];
+  // Raccoglie tutti gli impianti della zona, poi ordina dal prezzo più conveniente
+  const matches = [];
   for (const st of DATA.s) {
     const comune = (st[6] || '').toLowerCase();
     const ind = (st[5] || '').toLowerCase();
     const nome = (st[4] || '').toLowerCase();
     if (comune.includes(q) || ind.includes(q) || nome.includes(q)) {
-      out.push(st);
-      if (out.length >= 25) break;
+      matches.push(st);
+      if (matches.length >= 800) break;
     }
   }
-  if (!out.length) { searchResults.hidden = true; return; }
-  searchResults.innerHTML = out.map((st, i) => `
-    <li data-i="${i}">
-      <div class="r-title">${esc(st[4] || st[6])}</div>
-      <div class="r-sub">${esc(st[5] || '')} — ${esc(st[6])} (${esc(st[7])})</div>
-    </li>`).join('');
+  if (!matches.length) { searchResults.hidden = true; return; }
+
+  // Prezzo del carburante selezionato (rispetta il filtro Self/Servito); chi non ce l'ha va in fondo
+  const ranked = matches.map((st) => ({ st, p: bestPrice(st) }));
+  ranked.sort((a, b) => {
+    if (a.p == null) return b.p == null ? 0 : 1;
+    if (b.p == null) return -1;
+    return a.p - b.p;
+  });
+  const out = ranked.slice(0, 30);
+
+  searchResults.innerHTML =
+    `<li class="r-head">Ordinati dal più conveniente · ${esc(state.fuel)}</li>` +
+    out.map((o, i) => {
+      const st = o.st;
+      const badge = o.p != null
+        ? `<span class="r-price" style="background:${colorFor(o.p)}">${o.p.toFixed(3)}</span>`
+        : `<span class="r-price r-price-na">—</span>`;
+      return `<li data-i="${i}">
+        ${badge}
+        <div class="r-info">
+          <div class="r-title">${esc(st[4] || st[6])}</div>
+          <div class="r-sub">${esc(st[5] || '')} — ${esc(st[6])} (${esc(st[7])})</div>
+        </div>
+      </li>`;
+    }).join('');
   searchResults.hidden = false;
-  searchResults.querySelectorAll('li').forEach((li) => {
+  searchResults.querySelectorAll('li[data-i]').forEach((li) => {
     li.addEventListener('click', () => {
-      const st = out[+li.dataset.i];
+      const st = out[+li.dataset.i].st;
       map.setView([st[1], st[2]], 15);
       searchResults.hidden = true;
       searchInput.value = '';
@@ -279,7 +320,7 @@ async function init() {
     return;
   }
 
-  const principali = CARBURANTI_PRINCIPALI.filter((f) => DATA.fuels.includes(f));
+  principali = CARBURANTI_PRINCIPALI.filter((f) => DATA.fuels.includes(f));
   if (!principali.includes(state.fuel)) state.fuel = principali[0];
   state.fuelIdx = DATA.fuels.indexOf(state.fuel);
   buildFuelButtons(principali);

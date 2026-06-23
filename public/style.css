@@ -69,14 +69,41 @@ html, body {
   z-index: 1200;
 }
 .search-results li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 9px 12px;
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
 }
 .search-results li:hover, .search-results li.active { background: #eef4ff; }
+.search-results .r-info { min-width: 0; }
 .search-results .r-title { font-weight: 600; }
 .search-results .r-sub { font-size: 12px; color: var(--ink-soft); }
+.search-results .r-price {
+  flex-shrink: 0;
+  min-width: 58px;
+  text-align: center;
+  padding: 4px 6px;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.search-results .r-price-na { background: var(--line); color: var(--ink-soft); font-weight: 600; }
+.search-results .r-head {
+  display: block;
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  cursor: default;
+}
+.search-results .r-head:hover { background: transparent; }
 
 /* ---------- Layout ---------- */
 main {
@@ -130,6 +157,20 @@ main {
   cursor: pointer;
 }
 .toggle-group button.active { background: var(--brand); color: #fff; }
+
+.reset-btn {
+  width: 100%;
+  padding: 10px;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all .12s;
+}
+.reset-btn:hover { border-color: var(--brand); color: var(--brand); }
 
 .legend-bar {
   height: 12px;
