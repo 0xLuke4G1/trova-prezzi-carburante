@@ -1,0 +1,15 @@
+{
+  "name": "carburanti-italia",
+  "version": "1.0.0",
+  "description": "Mappa dei prezzi dei carburanti in Italia (dati MIMIT) — sito statico per GitHub Pages",
+  "type": "module",
+  "scripts": {
+    "build": "node src/build.js",
+    "start": "node src/server.js",
+    "dev": "node src/build.js && node src/server.js"
+  },
+  "dependencies": {
+    "compression": "^1.7.5",
+    "express": "^4.21.2"
+  }
+}

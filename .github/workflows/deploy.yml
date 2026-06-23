@@ -1,0 +1,48 @@
+name: Aggiorna dati e pubblica su GitHub Pages
+
+on:
+  # Pubblica a ogni push sul branch principale
+  push:
+    branches: [main]
+  # Aggiorna i prezzi ogni giorno alle 07:30 UTC (~09:30 ora italiana)
+  schedule:
+    - cron: '30 7 * * *'
+  # Permette l'avvio manuale dalla tab "Actions"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Evita deploy concorrenti
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Scarica i CSV ufficiali MIMIT e genera public/stations.json
+      - name: Genera dati statici
+        run: node src/build.js
+
+      - uses: actions/configure-pages@v5
+
+      # Pubblica la cartella public/ (sito statico)
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

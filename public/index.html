@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>Prezzi Carburanti Italia — mappa live</title>
+  <meta name="description" content="Mappa dei prezzi di benzina, gasolio, GPL e metano in Italia. Dati ufficiali MIMIT aggiornati ogni giorno." />
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">⛽</span>
+      <div>
+        <h1>Prezzi Carburanti Italia</h1>
+        <p class="sub" id="meta-line">Caricamento dati…</p>
+      </div>
+    </div>
+
+    <div class="search">
+      <input id="search-input" type="search" autocomplete="off"
+             placeholder="Cerca un comune o un indirizzo…" aria-label="Cerca località" />
+      <ul id="search-results" class="search-results" hidden></ul>
+    </div>
+  </header>
+
+  <main>
+    <aside class="panel" id="panel">
+      <section class="panel-block">
+        <h2>Carburante</h2>
+        <div class="fuel-buttons" id="fuel-buttons"></div>
+      </section>
+
+      <section class="panel-block">
+        <h2>Modalità</h2>
+        <div class="toggle-group" id="self-toggle" role="group" aria-label="Modalità di rifornimento">
+          <button data-self="" class="active">Tutti</button>
+          <button data-self="1">Self</button>
+          <button data-self="0">Servito</button>
+        </div>
+      </section>
+
+      <section class="panel-block legend">
+        <h2>Legenda prezzo</h2>
+        <div class="legend-bar"></div>
+        <div class="legend-labels">
+          <span id="legend-min">—</span>
+          <span>più conveniente → più caro</span>
+          <span id="legend-max">—</span>
+        </div>
+        <p class="hint" id="count-line"></p>
+      </section>
+
+      <p class="source">Fonte: <strong>MIMIT</strong> — Osservaprezzi Carburanti.<br />
+        Prezzi ufficiali comunicati dai gestori, aggiornati ogni giorno.</p>
+    </aside>
+
+    <div id="map" role="application" aria-label="Mappa dei distributori"></div>
+
+    <button class="panel-toggle" id="panel-toggle" aria-label="Apri/chiudi filtri">Filtri ▾</button>
+  </main>
+
+  <!-- Pannello dettaglio impianto -->
+  <div class="sheet" id="sheet" hidden>
+    <div class="sheet-card">
+      <button class="sheet-close" id="sheet-close" aria-label="Chiudi">✕</button>
+      <div id="sheet-content"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

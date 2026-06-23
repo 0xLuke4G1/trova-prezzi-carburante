@@ -1,0 +1,5 @@
+node_modules/
+data/
+public/stations.json
+*.log
+.DS_Store
